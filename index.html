@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Visual Memory Smile</title>
+    <style>
+        /* General body and typography styles */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #00ff00;
+            font-family: monospace;
+            overflow: hidden;
+            user-select: none;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+        }
+
+        /* Main container for the game */
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+
+        /* Background stars effect */
+        #stars-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background-color: #00ff00;
+            border-radius: 50%;
+            animation: moveStar 20s linear infinite;
+        }
+
+        @keyframes moveStar {
+            from {
+                transform: translateY(0vh) translateX(var(--x-start));
+            }
+            to {
+                transform: translateY(100vh) translateX(var(--x-end));
+            }
+        }
+        
+        /* Scanlines overlay for retro effect */
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: linear-gradient(
+                to bottom,
+                rgba(0, 0, 0, 0) 0%,
+                rgba(0, 0, 0, 0) 98%,
+                rgba(255, 255, 255, 0.1) 99%,
+                rgba(0, 0, 0, 0) 100%
+            );
+            background-size: 100% 3px;
+            animation: scan 10s linear infinite;
+        }
+        
+        @keyframes scan {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100vh; }
+        }
+
+        /* Grid styling and animation */
+        .grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            background-image: 
+                linear-gradient(to right, #00ff0020 1px, transparent 1px),
+                linear-gradient(to bottom, #00ff0020 1px, transparent 1px);
+            background-size: 20px 20px;
+            transition: opacity 0.3s;
+        }
+        
+        .grid.visible {
+            opacity: 1;
+        }
+
+        .grid.ripple-active {
+            animation: gridRipple 0.5s ease-out;
+        }
+
+        @keyframes gridRipple {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .red-grid-overlay {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            background-image:
+                linear-gradient(to right, #ff000080 1px, transparent 1px),
+                linear-gradient(to bottom, #ff000080 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+            opacity: 0;
+            animation: redGridFade 1.2s ease-out forwards;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes redGridFade {
+            0% { opacity: 1; clip-path: circle(0% at 50% 50%); }
+            20% { opacity: 0.8; clip-path: circle(100% at 50% 50%); }
+            100% { opacity: 0; clip-path: circle(100% at 50% 50%); }
+        }
+
+        /* Base smiley style */
+        .smiley {
+            position: absolute;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.2s;
+            box-sizing: border-box; 
+            overflow: hidden;
+            filter: drop-shadow(0 0 5px #00ff00);
+        }
+        
+        .smiley::before, .smiley::after { content: ''; position: absolute; }
+        
+        .smiley::before {
+            top: calc(8px * var(--smiley-element-scale, 1));    
+            left: calc(10px * var(--smiley-element-scale, 1));  
+            width: calc(4px * var(--smiley-element-scale, 1));  
+            height: calc(4px * var(--smiley-element-scale, 1)); 
+            background: #00ff00;
+            border-radius: 50%;
+            box-shadow: calc(12px * var(--smiley-element-scale, 1)) 0 0 #00ff00;
+        }
+        
+        .smiley::after {
+            bottom: calc(10px * var(--smiley-element-scale, 1)); 
+            left: calc(12px * var(--smiley-element-scale, 1)); 
+            width: calc(16px * var(--smiley-element-scale, 1));  
+            height: calc(8px * var(--smiley-element-scale, 1));  
+            border: calc(2px * var(--smiley-element-scale, 1)) solid #00ff00; 
+            border-top: none; 
+            border-radius: 0 0 calc(16px * var(--smiley-element-scale, 1)) calc(16px * var(--smiley-element-scale, 1)); 
+        }
+
+        .smiley.frown::after {
+            border-top: calc(2px * var(--smiley-element-scale, 1)) solid #00ff00;
+            border-bottom: none;
+            border-radius: calc(16px * var(--smiley-element-scale, 1)) calc(16px * var(--smiley-element-scale, 1)) 0 0;
+            top: calc(22px * var(--smiley-element-scale, 1)); 
+            bottom: auto;
+        }
+        
+        .smiley.visible { opacity: 1; }
+        .smiley.hit { animation: explodeHit 0.6s ease-out forwards; }
+        .smiley.missed { animation: pulseMiss 1.2s ease-in-out forwards; }
+        
+        @keyframes explodeHit {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 5px #00ff00) brightness(1); }
+            50% { transform: scale(1.5) rotate(90deg); opacity: 0.9; filter: drop-shadow(0 0 15px #ffff00) brightness(2); }
+            100% { transform: scale(0) rotate(360deg); opacity: 0; filter: drop-shadow(0 0 25px #ff00ff) brightness(3); }
+        }
+        
+        @keyframes pulseMiss {
+            0%, 100% { transform: scale(1); opacity: 1; border-color: #00ff00; }
+            25% { transform: scale(1.1); opacity: 0.7; border-color: #ff8800; }
+            50% { transform: scale(1); opacity: 0.5; border-color: #ff0000; }
+            75% { transform: scale(1.1); opacity: 0.7; border-color: #ff8800; }
+        }
+        
+        .glitch-active { animation: screenGlitch 0.2s linear; }
+        @keyframes screenGlitch {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(2px, -2px); }
+            50% { transform: translate(-2px, 2px); }
+            75% { transform: translate(1px, -1px); }
+        }
+
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 100; text-shadow: 0 0 5px #00ff00; }
+        #level, #lives, #combo, #clicksCount { font-size: 24px; margin-bottom: 10px; }
+
+        #gameOverScreen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 300; text-align: center;
+            padding: 20px; box-sizing: border-box; color: #ff0000; font-size: 36px;
+            font-weight: bold; display: none; text-shadow: 0 0 10px #ff0000;
+        }
+        #gameOverScreen h2 { font-size: clamp(36px, 8vw, 60px); margin-bottom: 20px; }
+        #gameOverScreen p { font-size: clamp(18px, 4vw, 30px); margin-bottom: 30px; color: #00ff00; text-shadow: 0 0 5px #00ff00; }
+        #gameOverRestartBtn {
+            padding: 15px 30px; background: #00ff00; color: #000; border: 2px solid #00ff00;
+            border-radius: 5px; font-size: clamp(18px, 4vw, 24px); cursor: pointer; text-shadow: none; transition: all 0.2s;
+        }
+        #gameOverRestartBtn:hover { background: #000; color: #00ff00; box-shadow: 0 0 15px #00ff00; }
+        
+        #restartBtn {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+            padding: 15px 30px; background: #00ff00; color: #000; border: 2px solid #00ff00;
+            border-radius: 5px; font-size: 18px; cursor: pointer; display: none; z-index: 101;
+            pointer-events: auto; transition: all 0.2s;
+        }
+        #restartBtn:hover { background: #000; color: #00ff00; box-shadow: 0 0 15px #00ff00; }
+        
+        /* NEW: Compact rules styling */
+        #rules {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
+            justify-content: flex-start; align-items: center; z-index: 200;
+            text-align: center; padding: 20px; box-sizing: border-box; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        #rules h1 { font-size: clamp(24px, 6vw, 36px); margin-bottom: 20px; color: #00ff00; text-shadow: 0 0 8px #00ff00; }
+        #rules p {
+            font-size: clamp(12px, 3vw, 16px); /* Reduced font size */
+            line-height: 1.5;
+            max-width: 550px; /* Slightly narrower for readability */
+            margin-bottom: 10px;
+        }
+        
+        .qr-section { margin: 20px 0; width: 100%; max-width: 600px; }
+        .qr-section h3 { font-size: clamp(16px, 4vw, 20px); color: #00ff00; margin-bottom: 15px; }
+        .qr-codes { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-bottom: 20px; }
+        .qr-code {
+            display: flex; flex-direction: column; align-items: center; background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00; border-radius: 10px; padding: 20px; /* More padding */
+            cursor: pointer; transition: all 0.3s;
+        }
+        .qr-code:hover { background: rgba(0, 255, 0, 0.2); transform: scale(1.05); box-shadow: 0 0 10px #00ff00; }
+        .qr-code canvas { 
+            width: 100px; /* Increased size */
+            height: 100px; /* Increased size */
+            border: 2px solid #00ff00; border-radius: 5px; margin-bottom: 10px; 
+        }
+        .qr-code p { font-size: clamp(10px, 2.5vw, 12px); margin: 5px 0; word-break: break-all; line-height: 1.3; }
+        
+        #startBtn {
+            padding: 15px 30px; background: #00ff00; color: #000; border: 2px solid #00ff00;
+            border-radius: 5px; font-size: clamp(16px, 4vw, 20px); cursor: pointer;
+            margin-top: 20px; min-height: 44px; transition: all 0.2s;
+        }
+        #startBtn:hover { background: #000; color: #00ff00; box-shadow: 0 0 15px #00ff00; }
+        
+        .click-indicator {
+            position: absolute; width: 20px; height: 20px; border: 2px solid #ff0000;
+            border-radius: 50%; pointer-events: none; animation: clickPulse 0.5s ease-out forwards;
+            filter: drop-shadow(0 0 5px #ff0000);
+        }
+        @keyframes clickPulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
+        
+        .hit-location-marker {
+            position: absolute;
+            width: 20px; height: 20px;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.3);
+            box-shadow: 0 0 10px #00ff00, inset 0 0 5px #00ff00;
+            animation: hitMarkerPulse 1.5s ease-out forwards;
+            pointer-events: none;
+        }
+        @keyframes hitMarkerPulse {
+            0% { transform: scale(0.5); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        .miss-location-marker {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+        }
+        .miss-location-marker::before,
+        .miss-location-marker::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: #ff0000;
+            box-shadow: 0 0 8px #ff0000;
+            border-radius: 2px;
+        }
+        .miss-location-marker::before {
+            transform: rotate(45deg);
+            animation: shatter-1 1s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
+        .miss-location-marker::after {
+            transform: rotate(-45deg);
+            animation: shatter-2 1s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
+        @keyframes shatter-1 {
+            0% { transform: rotate(45deg) scale(0.5); opacity: 1; }
+            100% { transform: rotate(60deg) scale(1.5) translateX(20px); opacity: 0; }
+        }
+        @keyframes shatter-2 {
+            0% { transform: rotate(-45deg) scale(0.5); opacity: 1; }
+            100% { transform: rotate(-60deg) scale(1.5) translateX(-20px); opacity: 0; }
+        }
+
+        .sparkle {
+            position: absolute; width: 8px; height: 8px; background: #00ff00;
+            animation: sparkle 0.6s ease-out forwards;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        }
+        @keyframes sparkle { 0% { transform: scale(0) rotate(0deg); } 50% { transform: scale(1.5) rotate(180deg); } 100% { transform: scale(0) rotate(360deg); opacity: 0; } }
+
+        .miss-sparkle {
+            position: absolute; width: 6px; height: 2px; background: #ff0000;
+            opacity: 0; animation: missSparkle 0.5s ease-out forwards;
+        }
+        @keyframes missSparkle { 0% { opacity: 1; } 100% { transform: translateX(calc(var(--vx) * 20px)) translateY(calc(var(--vy) * 20px)); opacity: 0; } }
+        
+        @media (max-width: 768px) {
+            .qr-codes { flex-direction: column; align-items: center; }
+            .qr-code { width: 90%; max-width: 300px; }
+            #ui { font-size: clamp(14px, 4vw, 18px); }
+            #restartBtn { padding: 12px 24px; font-size: clamp(14px, 4vw, 16px); min-height: 44px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="stars-container"></div>
+        <div class="scanlines"></div>
+        <div id="rules">
+            <h1>NO-NEURODEGENERATION</h1>
+            <p>1. Remember the positions of the green smileys.</p>
+            <p>2. When the grid appears, click where they were located.</p>
+            <p>3. Hit all smileys to advance to the next level.</p>
+            <p>4. Hit >50% to restart the level without losing a life.</p>
+            <p>5. Hit <=50% to lose a life, but you get one bonus click on the next attempt.</p>
+            <p>6. Last Chance: If you lose your last life but your total accuracy for the level is over 50%, you are granted one final life to try again.</p>
+            <p>7. Reaching level 20 indicates highly developed visual abilities.</p>
+            <div class="qr-section">
+                <h3>Support Development</h3>
+                <div class="qr-codes">
+                    <div class="qr-code" onclick="window.open('https://www.webmoney.com/', '_blank')"><canvas id="wmQR"></canvas><p>WebMoney<br>Z954624130446<br>E315482991904</p></div>
+                    <div class="qr-code" onclick="window.open('https://paypal.me/', '_blank')"><canvas id="ppQR"></canvas><p>PayPal<br>nizenkov11@gmail.com</p></div>
+                    <div class="qr-code" onclick="window.open('https://etherscan.io/address/0x896d8d26417DfeE7a49B75aa68ac40A23E7F5F2c', '_blank')"><canvas id="ethQR"></canvas><p>Ethereum (ETH)<br>0x896d8...7F5F2c</p></div>
+                </div>
+            </div>
+            <button id="startBtn">START GAME</button>
+        </div>
+        <div id="ui">
+            <div id="level">Level: 1</div>
+            <div id="lives">Lives: 3</div>
+            <div id="combo">Combo: 1x</div>
+            <div id="clicksCount">Clicks: 0</div>
+        </div>
+        <button id="restartBtn">Restart Level</button>
+        <div id="gameOverScreen">
+            <h2>GAME OVER</h2>
+            <p id="finalLevel">You reached Level: 1</p>
+            <button id="gameOverRestartBtn">PLAY AGAIN</button>
+        </div>
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <script>
+        class MemorySmileyGame {
+            constructor() {
+                this.level = 1; this.lives = 3; this.combo = 0; this.scoreMultiplier = 1;
+                this.smileys = []; this.clicks = []; this.gameState = 'waiting'; this.audioContext = null;
+                this.bonusShotActive = false;
+                this.totalHitsThisLevel = 0;
+                this.totalSmileysThisLevel = 0;
+                this.lastChanceUsed = false; // Flag to ensure last chance is only given once per level
+                this.initAudio(); this.createStars(50); this.generateQRCodes(); this.bindEvents(); this.updateUI();
+            }
+
+            createStars(count) {
+                const container = document.getElementById('stars-container');
+                for (let i = 0; i < count; i++) {
+                    const star = document.createElement('div');
+                    star.className = 'star';
+                    const size = Math.random() * 2 + 1;
+                    star.style.cssText = `width:${size}px; height:${size}px; top:${Math.random()*100}vh; left:${Math.random()*100}vw; opacity:${Math.random()*0.5+0.2}; animation-duration:${Math.random()*10+10}s; animation-delay:${Math.random()*5}s;`;
+                    container.appendChild(star);
+                }
+            }
+            
+            initAudio() { try { this.audioContext = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.warn('Web Audio API is not supported.'); } }
+
+            generateQRCodes() {
+                try {
+                    const qrDefs = [
+                        { id: 'wmQR', data: 'WebMoney Wallets: Z954624130446, E315482991904' },
+                        { id: 'ppQR', data: 'paypal.me/nizenkov11' },
+                        { id: 'ethQR', data: '0x896d8d26417DfeE7a49B75aa68ac40A23E7F5F2c' }
+                    ];
+                    qrDefs.forEach(def => {
+                        const qr = qrcode(0, 'M');
+                        qr.addData(def.data);
+                        qr.make();
+                        this.drawQRCode(def.id, qr);
+                    });
+                } catch (e) { console.warn('QR code generation failed:', e); }
+            }
+            
+            drawQRCode(canvasId, qr) {
+                const canvas = document.getElementById(canvasId); if (!canvas) return;
+                const ctx = canvas.getContext('2d'); const moduleCount = qr.getModuleCount(); const cellSize = canvas.width / moduleCount;
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#00ff00';
+                for (let row = 0; row < moduleCount; row++) { for (let col = 0; col < moduleCount; col++) { if (qr.isDark(row, col)) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize); } }
+            }
+            
+            playSound(sound) {
+                if (!this.audioContext) return;
+                const { notes, duration = 0.1, type = 'sine', volume = 0.1, envelope = { attack: 0.01, decay: 0.05, sustain: 0.0, release: 0.05 } } = sound;
+                const noteDuration = duration / notes.length;
+                notes.forEach((freq, index) => {
+                    setTimeout(() => {
+                        const osc = this.audioContext.createOscillator(); const gainNode = this.audioContext.createGain();
+                        osc.connect(gainNode); gainNode.connect(this.audioContext.destination); const now = this.audioContext.currentTime;
+                        osc.type = type; osc.frequency.setValueAtTime(freq, now);
+                        gainNode.gain.setValueAtTime(0, now);
+                        gainNode.gain.linearRampToValueAtTime(volume, now + envelope.attack);
+                        gainNode.gain.linearRampToValueAtTime(envelope.sustain * volume, now + envelope.attack + envelope.decay);
+                        gainNode.gain.setValueAtTime(envelope.sustain * volume, now + duration - envelope.release);
+                        gainNode.gain.linearRampToValueAtTime(0, now + duration);
+                        osc.start(now); osc.stop(now + duration);
+                    }, index * (noteDuration * 0.8));
+                });
+            }
+            
+            bindEvents() {
+                document.getElementById('startBtn').addEventListener('click', () => {
+                    document.getElementById('rules').style.display = 'none';
+                    if (this.audioContext.state === 'suspended') this.audioContext.resume();
+                    this.startGame();
+                });
+                document.getElementById('restartBtn').addEventListener('click', () => this.restartLevel());
+                document.getElementById('gameOverRestartBtn').addEventListener('click', () => this.resetGame());
+                const handleInteraction = (x, y) => {
+                    if (this.gameState === 'clicking') this.handleGridClick(x, y); else if (this.gameState === 'showing') this.handleDarkPhaseClick(x, y);
+                };
+                document.getElementById('gameContainer').addEventListener('click', (e) => handleInteraction(e.clientX, e.clientY));
+                document.getElementById('gameContainer').addEventListener('touchstart', (e) => {
+                    if (this.gameState === 'clicking' || this.gameState === 'showing') { e.preventDefault(); handleInteraction(e.touches[0].clientX, e.touches[0].clientY); }
+                }, { passive: false });
+            }
+
+            updateUI() {
+                document.getElementById('level').textContent = `Level: ${this.level}`;
+                document.getElementById('lives').textContent = `Lives: ${this.lives}`;
+                document.getElementById('combo').textContent = `Combo: ${this.scoreMultiplier}x`;
+                document.getElementById('clicksCount').textContent = 'Clicks: ' + this.clicks.length;
+            }
+
+            startGame() {
+                this.level = 1; this.lives = 3; this.combo = 0; this.scoreMultiplier = 1;
+                document.getElementById('gameOverScreen').style.display = 'none'; this.startLevel(true);
+            }
+            
+            startLevel(isNewLevel = false) {
+                this.gameState = 'showing'; this.clicks = [];
+                if (isNewLevel) { 
+                    this.lives = 3; 
+                    this.bonusShotActive = false;
+                    this.totalHitsThisLevel = 0;
+                    this.totalSmileysThisLevel = 0;
+                    this.lastChanceUsed = false; // Reset the last chance flag for the new level
+                    this.playSound({ notes: [261.63, 329.63, 392.00], duration: 0.2, type: 'triangle' }); 
+                }
+                this.clearDynamicElements(); this.generateSmileys(); this.showSmileys(); this.updateUI();
+                document.getElementById('restartBtn').style.display = 'none'; document.getElementById('grid').classList.remove('visible');
+            }
+            
+            generateSmileys() {
+                this.smileys = [];
+                const size = Math.max(25, 80 - (this.level - 1) * 2.5); const separation = size * 2.5;
+                const areaFactor = 0.5 + Math.min(1, (this.level - 1) / 15) * 0.4;
+                const effectiveW = window.innerWidth * areaFactor; const effectiveH = window.innerHeight * areaFactor;
+                const offsetX = (window.innerWidth - effectiveW) / 2; const offsetY = (window.innerHeight - effectiveH) / 2;
+                
+                this.totalSmileysThisLevel += this.level;
+
+                for (let i = 0; i < this.level; i++) {
+                    let pos, attempts = 0;
+                    do { pos = { x: Math.random() * effectiveW + offsetX, y: Math.random() * effectiveH + offsetY, size: size }; attempts++; }
+                    while (this.isOverlapping(pos, separation) && attempts < 200);
+                    if (attempts >= 200) console.warn(`Could not find a non-overlapping position.`);
+                    this.smileys.push(pos);
+                }
+            }
+            
+            isOverlapping(newPos, separation) { return this.smileys.some(s => Math.hypot(newPos.x - s.x, newPos.y - s.y) < separation); }
+            
+            showSmileys() {
+                this.smileys.forEach((smiley, index) => {
+                    const el = document.createElement('div'); el.className = 'smiley'; el.id = `smiley-${index}`;
+                    const scaleFactor = smiley.size / 40;
+                    el.style.cssText = `width:${smiley.size}px; height:${smiley.size}px; border-width:${2*scaleFactor}px; left:${smiley.x-smiley.size/2}px; top:${smiley.y-smiley.size/2}px;`;
+                    el.style.setProperty('--smiley-element-scale', scaleFactor);
+                    document.getElementById('gameContainer').appendChild(el);
+                    setTimeout(() => el.classList.add('visible'), 100);
+                });
+                setTimeout(() => this.hideSmileysAndShowGrid(), Math.max(1000, 2000 - this.level * 100));
+            }
+            
+            hideSmileysAndShowGrid() {
+                document.querySelectorAll('.smiley').forEach(s => s.classList.remove('visible'));
+                setTimeout(() => {
+                    document.getElementById('grid').classList.add('visible'); this.gameState = 'clicking';
+                    this.playSound({ notes: [440.00, 493.88], duration: 0.15, type: 'square', volume: 0.08 });
+                }, 300);
+            }
+            
+            handleGridClick(x, y) {
+                const hitIndex = this.smileys.findIndex(s => Math.hypot(x - s.x, y - s.y) <= s.size / 2);
+
+                this.createClickIndicator(x, y, hitIndex !== -1);
+
+                if (hitIndex !== -1) {
+                    this.playSound({ notes: [1046.50], duration: 0.1, type: 'triangle', volume: 0.15 });
+                    this.clicks.push({ x, y, hit: true, smileyIndex: hitIndex });
+                } else {
+                    const grid = document.getElementById('grid');
+                    grid.classList.add('ripple-active');
+                    setTimeout(() => grid.classList.remove('ripple-active'), 500);
+                    this.createRedGridOverlay(x, y);
+
+                    this.playSound({ notes: [164.81, 155.56], duration: 0.2, type: 'sawtooth', volume: 0.08 });
+                    this.clicks.push({ x, y, hit: false });
+                }
+
+                this.updateUI();
+                const requiredClicks = this.bonusShotActive ? this.smileys.length + 1 : this.smileys.length;
+                if (this.clicks.length >= requiredClicks) { this.gameState = 'checking'; setTimeout(() => this.checkResults(), 200); }
+            }
+
+            handleDarkPhaseClick(x, y) { this.playSound({ notes: [110.00], duration: 0.15, type: 'sawtooth', volume: 0.05 }); this.createMissSparkles(x, y); }
+
+            checkResults() {
+                const hitIndices = new Set(this.clicks.filter(c => c.hit).map(c => c.smileyIndex));
+                const correctHits = hitIndices.size; 
+                const totalSmileys = this.smileys.length;
+                const percentageCorrect = totalSmileys > 0 ? (correctHits / totalSmileys) * 100 : 100;
+                
+                this.totalHitsThisLevel += correctHits;
+
+                this.clicks.forEach(click => {
+                    if(click.hit) { this.createHitLocationMarker(click.x, click.y); }
+                    else { this.createMissLocationMarker(click.x, click.y); }
+                });
+
+                this.smileys.forEach((smiley, index) => {
+                    const el = document.getElementById(`smiley-${index}`);
+                    if (hitIndices.has(index)) { el.classList.add('visible', 'hit'); this.createSparkles(smiley.x, smiley.y); }
+                    else { el.classList.add('visible', 'missed', 'frown'); }
+                });
+
+                let outcome = 'fail';
+                let grantLastChance = false;
+                if (correctHits === totalSmileys) outcome = 'win'; else if (percentageCorrect > 50) outcome = 'retry';
+
+                if (outcome === 'win') {
+                    this.combo++; this.scoreMultiplier = this.combo + 1; this.bonusShotActive = false;
+                } else {
+                    this.combo = 0; this.scoreMultiplier = 1;
+                    if (outcome === 'fail') {
+                        this.lives--; this.bonusShotActive = true;
+                        // NEW: Check for "Last Chance" life, ensuring it's only given once
+                        if (this.lives === 0 && !this.lastChanceUsed) {
+                            const lastChanceAccuracy = (this.totalHitsThisLevel / this.totalSmileysThisLevel) * 100;
+                            if (lastChanceAccuracy > 50) { // Changed threshold
+                                this.lives = 1;
+                                this.lastChanceUsed = true; // Use up the last chance
+                                grantLastChance = true;
+                            }
+                        }
+                    } else {
+                        this.bonusShotActive = false;
+                    }
+                }
+                this.updateUI();
+
+                const gameContainer = document.getElementById('gameContainer');
+                gameContainer.classList.add('glitch-active');
+                setTimeout(() => gameContainer.classList.remove('glitch-active'), 200);
+
+                setTimeout(() => {
+                    if (grantLastChance) { this.levelFailed(); return; }
+                    if (this.lives <= 0) { this.gameOver(); return; }
+                    if (outcome === 'win') this.levelComplete(); else if (outcome === 'retry') this.restartLevel(); else this.levelFailed();
+                }, 2000);
+            }
+            
+            createClickIndicator(x, y, isHit) {
+                if (!isHit) {
+                    this.createMissSparkles(x, y);
+                }
+                const indicator = document.createElement('div'); indicator.className = 'click-indicator';
+                indicator.style.left = `${x - 10}px`; indicator.style.top = `${y - 10}px`;
+                document.getElementById('gameContainer').appendChild(indicator);
+                setTimeout(() => indicator.remove(), 500);
+            }
+
+            createRedGridOverlay(x, y) {
+                const overlay = document.createElement('div');
+                overlay.className = 'red-grid-overlay';
+                overlay.style.left = `${x}px`;
+                overlay.style.top = `${y}px`;
+                document.getElementById('gameContainer').appendChild(overlay);
+                setTimeout(() => overlay.remove(), 1200);
+            }
+
+            createHitLocationMarker(x, y) {
+                const marker = document.createElement('div'); marker.className = 'hit-location-marker';
+                marker.style.left = `${x - 10}px`; marker.style.top = `${y - 10}px`;
+                document.getElementById('gameContainer').appendChild(marker);
+                setTimeout(() => marker.remove(), 1500);
+            }
+            
+            createMissLocationMarker(x, y) {
+                const marker = document.createElement('div'); marker.className = 'miss-location-marker';
+                marker.style.left = `${x - 20}px`; marker.style.top = `${y - 20}px`;
+                document.getElementById('gameContainer').appendChild(marker);
+                setTimeout(() => marker.remove(), 1000);
+            }
+            
+            createSparkles(centerX, centerY) {
+                for (let i = 0; i < 10; i++) {
+                    const sparkle = document.createElement('div'); sparkle.className = 'sparkle';
+                    const angle = Math.random() * 2 * Math.PI; const distance = Math.random() * 40;
+                    sparkle.style.left = `${centerX + Math.cos(angle) * distance}px`; sparkle.style.top = `${centerY + Math.sin(angle) * distance}px`;
+                    document.getElementById('gameContainer').appendChild(sparkle); setTimeout(() => sparkle.remove(), 600);
+                }
+            }
+
+            createMissSparkles(centerX, centerY) {
+                for (let i = 0; i < 7; i++) {
+                    const sparkle = document.createElement('div'); sparkle.className = 'miss-sparkle'; const angle = Math.random() * 2 * Math.PI;
+                    sparkle.style.transform = `rotate(${angle}rad)`; sparkle.style.left = `${centerX}px`; sparkle.style.top = `${centerY}px`;
+                    sparkle.style.setProperty('--vx', Math.cos(angle)); sparkle.style.setProperty('--vy', Math.sin(angle));
+                    document.getElementById('gameContainer').appendChild(sparkle); setTimeout(() => sparkle.remove(), 500);
+                }
+            }
+            
+            levelComplete() {
+                this.level++;
+                this.playSound({ notes: [523.25, 659.26, 783.99, 1046.50, 1318.51, 1567.98], duration: 1.5, type: 'sine', volume: 0.12 });
+                setTimeout(() => this.startLevel(true), 1500);
+            }
+            
+            levelFailed() {
+                this.playSound({ notes: [220.00, 185.00, 164.81], duration: 1.2, type: 'sawtooth', volume: 0.1 });
+                document.getElementById('restartBtn').style.display = 'block'; this.gameState = 'waiting';
+            }
+
+            gameOver() {
+                this.gameState = 'gameover'; document.getElementById('gameOverScreen').style.display = 'flex';
+                document.getElementById('finalLevel').textContent = `You reached Level: ${this.level}`;
+                this.playSound({ notes: [130.81, 123.47, 110.00, 98.00, 87.31, 82.41], duration: 3.5, type: 'square', volume: 0.15 });
+            }
+
+            resetGame() {
+                this.level = 1; this.lives = 3; this.combo = 0; this.scoreMultiplier = 1;
+                this.smileys = []; this.clicks = []; this.gameState = 'waiting';
+                this.bonusShotActive = false;
+                this.totalHitsThisLevel = 0;
+                this.totalSmileysThisLevel = 0;
+                this.lastChanceUsed = false;
+                this.clearDynamicElements();
+                document.getElementById('gameOverScreen').style.display = 'none';
+                document.getElementById('rules').style.display = 'flex';
+                document.getElementById('restartBtn').style.display = 'none';
+                this.updateUI();
+            }
+            
+            restartLevel() { this.startLevel(false); }
+            
+            clearDynamicElements() {
+                const selectors = ['.smiley', '.hit-location-marker', '.miss-location-marker', '.sparkle', '.click-indicator', '.miss-sparkle', '.red-grid-overlay'];
+                selectors.forEach(selector => document.querySelectorAll(selector).forEach(el => el.remove()));
+            }
+        }
+        
+        window.addEventListener('load', () => new MemorySmileyGame());
+    </script>
+</body>
+</html>
